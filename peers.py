@@ -6,6 +6,9 @@ import requests
 
 
 class Peers(object):
+    """
+    Holds the tracker information and the list of ip addresses and ports.
+    """
     def __init__(self, trackerFile):
         self.peers = {}
         self.peer_id = '-lita38470993887523-'
@@ -14,7 +17,6 @@ class Peers(object):
         peersString = self.getPeers()
         self.peersString = peersString
         self.parseBinaryModelToString(peersString)
-
 
     def chunkToSixBytes(self, peerString):
         """
