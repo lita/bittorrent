@@ -7,8 +7,11 @@ Bittorrent protocals from stratch.
 I used Kristen Widman's blog as a guide. Her posts were extremely helpful. 
 I couldn't have gotten this far without her guide.
 
-http://www.kristenwidman.com/blog/how-to-write-a-bittorrent-client-part-1/
-http://www.kristenwidman.com/blog/how-to-write-a-bittorrent-client-part-2/
+Part 1:
+http://www.kristenwidman.com/blog/how-to-write-a-bittorrent-client-part-1
+
+Part 2:
+http://www.kristenwidman.com/blog/how-to-write-a-bittorrent-client-part-2
 
 I also used the Bittorrent Unofficial Spec to format my packets.
 
