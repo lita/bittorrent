@@ -4,17 +4,14 @@ import socket
 import struct
 import math
 import sys
+import os
 
 from bitstring import BitArray
 import bencode
 import requests
 
-from peers import Peers
+from peers import PeerManager
 from pieces import Piece
-
-HEADER_SIZE = 28 # This is just the pstrlen+pstr+reserved
-
-# Need to handle timeouts
 
 class BittorrentParser(object):
     """
@@ -23,6 +20,7 @@ class BittorrentParser(object):
     on the message code. Then sends a 'request' message to get more data till the file
     is completely downloaded.
     """
+   
     def __init__(self, socket, message, peers):
         self.socket = socket
         self.buffer = message
@@ -30,25 +28,24 @@ class BittorrentParser(object):
         self.pieces = []
         self.generatePieces(peers)
         self.bitField = BitArray(len(self.pieces))
-        self.process_message()
-
+]
     def generatePieces(self, peers):
 
         print "Initalizing..."
 
         files = peers.tracker['info']['files']
         totalLength = 0
-        pieceLength = peers.tracker['info']['piece length']
         pieceHashes = peers.tracker['info']['pieces']
+        pieceLength = peers.tracker['info']['piece length']
         totalLength = sum([file['length'] for file in files])
-        numPieces =  int(math.ceil(float(totalLength)/pieceLength))
+        self.numPieces =  int(math.ceil(float(totalLength)/pieceLength))
         counter = totalLength
-        for i in range(numPieces):
-            if i == numPieces-1:
+        for i in range(self.numPieces):
+            if i == self.numPieces-1:
                 self.pieces.append(Piece(i, counter, pieceHashes[0:20]))
             else:
                 self.pieces.append(Piece(i, pieceLength, pieceHashes[0:20]))
-                counter -= pieceLength
+                counter -= self.pieceLength
                 pieceHashes = pieceHashes[20:]
 
     def convertBytesToDecimal(self, headerBytes, power):
@@ -168,67 +165,6 @@ class BittorrentParser(object):
                 self.buffer += self.socket.recv(2**14)
                 self.sentInterested=True
 
-def makeHandshakeMsg(peers):
-    pstrlen = '\x13'
-    pstr = 'BitTorrent protocol'
-    reserved = '\x00\x00\x00\x00\x00\x00\x00\x00'
-    infoHash = peers.infoHash
-    peer_id = '-lita38470993824756-'
-
-    handshake = pstrlen+pstr+reserved+infoHash+peer_id
-
-    return handshake
-
-def checkValidPeer(response, peers):
-    responseInfoHash = response[HEADER_SIZE:HEADER_SIZE+len(peers.infoHash)]
-    
-    if responseInfoHash == peers.infoHash:
-        message = response[HEADER_SIZE+len(peers.infoHash)+20:]
-
-        return message
-    else:
-        return None
-
-def connectToPeers(peers):
-    for ip in peers.peers.keys():
-        port = peers.peers[ip]
-        mySocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        mySocket.settimeout(5)
-        try:
-            mySocket.connect((ip, port))
-        except socket.timeout:
-            print "Connection Time out. IP %s Port: %s " % (ip, port)
-            mySocket.close()
-            continue
-        except socket.error as err:
-            print "Failed connection. IP: %s Port: %s" % (ip, port)
-            print "Error: %s" % err
-            mySocket.close()
-            continue
-
-        handshake = makeHandshakeMsg(peers)
-        mySocket.send(handshake)
-        
-        try:
-            response = mySocket.recv(1028)
-        except socket.error as err:
-            print "Failed connection. IP: %s Port: %s" % (ip, port)
-            print "Error: %s" % err
-            mySocket.close()
-            continue            
-
-        print "Conncted to IP: %s Port: %s" % (ip, port)
-        message = checkValidPeer(response, peers)
-        if message:
-            print "Handshake Valid"
-            return (mySocket, message)
-        else:
-            print "Info Hash does not match. Moving to next peer..."
-            mySocket.close()
-            continue
-        mySocket.close()
-        return (None, None)
-
 def generateMoreData(myBuffer, pieces):
     for piece in pieces:
         if piece.block:
@@ -237,11 +173,13 @@ def generateMoreData(myBuffer, pieces):
         else:
             raise ValueError('Pieces was corrupted. Did not download piece properly.')
 
-def writeToFile(files, pieces):
+def writeToFile(files, dirs, pieces):
     bufferGenerator = None
     myBuffer = ''
+    if not os.path.exists('./' + dirs):
+        os.makedirs('./'+dirs)
     for f in files:
-        fileObj = open('./' + f['path'][0], 'wb')
+        fileObj = open('./' + dirs + '/' + f['path'][0], 'wb')
         length = f['length']
 
         if not bufferGenerator:
@@ -265,14 +203,18 @@ def main():
         usage()
         sys.exit(2)
 
-
     trackerFile = sys.argv[1]
-    peers = Peers(trackerFile)
-    mySocket, message = connectToPeers(peers)
+    peers = PeerManager(trackerFile)
+    mySocket, message = peers.connectToPeers()
     if mySocket==None:
         raise RuntimeError("could not find peer")
     bittorrentParser = BittorrentParser(mySocket, message, peers)
-    writeToFile(peers.tracker['info']['files'], bittorrentParser.pieces)
+    bittorrentParser.process_message()
+    print "Writing to File..."
+    writeToFile(peers.tracker['info']['files'],
+                peers.tracker['info']['name'],
+                bittorrentParser.pieces)
+    print "Done!"
 
 if __name__ == "__main__":
     main()

@@ -54,3 +54,4 @@ docs/_build/
 
 bittorrent/
 *.torrent
+wireshark_logs/
