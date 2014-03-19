@@ -1,6 +1,5 @@
 import hashlib
-import pdb
-import socket
+]import socket
 import struct
 import math
 import sys
@@ -12,59 +11,39 @@ import requests
 
 from peers import PeerManager
 from pieces import Piece
+from reactor import Reactor
 
-class BittorrentParser(object):
+# TODO make the parser stateless and a parser for each object 
+
+def checkValidPeer(response, infoHash):
+    responseInfoHash = response[HEADER_SIZE:HEADER_SIZE+len(self.infoHash)]
+    
+    if responseInfoHash == infoHash:
+        message = response[HEADER_SIZE+len(infoHash)+20:]
+        print "Handshake Valid"
+        return message
+    else:
+        raise ValueError('InfoHash does not mach')
+
+def convertBytesToDecimal(headerBytes, power):
+    size = 0
+    for ch in headerBytes:
+        size += int(ord(ch))*256**power
+        power -= 1
+    return msgSize
+    
     """
-    This is the heart of the program. The BittorrentParser sends and recieves packets
-    from the peer connected. It parses the packet to the Bittorrent protocal depending
-    on the message code. Then sends a 'request' message to get more data till the file
-    is completely downloaded.
-    """
-   
-    def __init__(self, socket, message, peers):
-        self.socket = socket
-        self.buffer = message
-        self.sentInterested = False
-        self.pieces = []
-        self.generatePieces(peers)
-        self.bitField = BitArray(len(self.pieces))
-]
-    def generatePieces(self, peers):
-
-        print "Initalizing..."
-
-        files = peers.tracker['info']['files']
-        totalLength = 0
-        pieceHashes = peers.tracker['info']['pieces']
-        pieceLength = peers.tracker['info']['piece length']
-        totalLength = sum([file['length'] for file in files])
-        self.numPieces =  int(math.ceil(float(totalLength)/pieceLength))
-        counter = totalLength
-        for i in range(self.numPieces):
-            if i == self.numPieces-1:
-                self.pieces.append(Piece(i, counter, pieceHashes[0:20]))
-            else:
-                self.pieces.append(Piece(i, pieceLength, pieceHashes[0:20]))
-                counter -= self.pieceLength
-                pieceHashes = pieceHashes[20:]
-
-    def convertBytesToDecimal(self, headerBytes, power):
-        size = 0
-        for ch in headerBytes:
-            size += int(ord(ch))*256**power
-            power -= 1
-        return size
-
     def handleBitfield(self, payload):
         # TODO: check to see if valid bitfield. Aka the length of the bitfield matches with the 'on' bits. 
         # COULD BE MALICOUS and you should drop the connection. 
         self.bitField = BitArray(bytes=payload)
+    """
 
-    def handleHave(self, payload):
-        index = self.convertBytesToDecimal(payload, 3)
-        print "Handling Have"
-        print "Index: %d" % index
-        self.bitField[index] = True
+def handleHave(peer, payload):
+    index = self.convertBytesToDecimal(payload, 3)
+    print "Handling Have"
+    print "Index: %d" % index
+    peer.bitField[index] = True
 
     def parse_message(self):
         while self.buffer:
@@ -81,21 +60,29 @@ class BittorrentParser(object):
             return (msgSize, payload, msgCode)
             
 
-    def makeInterestedMessage(self):
-        interested = '\x00\x00\x00\x01\x02'
+def makeInterestedMessage():
+    interested = '\x00\x00\x00\x01\x02'
 
-        return interested
+    return interested
 
-    def findNextBlock(self):
-        for i in range(len(self.pieces)):
-            if self.bitField[i]:
-                piece = self.pieces[i]
-                for j in range(piece.num_blocks):
-                    if not piece.bitField[j]:
-                        return (i, piece.blocks[j].offset, piece.blocks[j].size)
-        return None
+def findNextBlock(peerMngr, peersConnected):
+    for i in range(len(peerMngr.pieces)):
+        if not peerMngr.bitField[i]:
+            piece = peerMngr.pieces[i]
+            foundPeer = None
+            for peer in peersConnected:
+                if peer.bitfield[i]:
+                    foundPeer = peer
+                    break
+            for j in range(piece.num_blocks):
+                if not piece.bitField[j]:
+                    return (i, 
+                            piece.blocks[j].offset, 
+                            piece.blocks[j].size, 
+                            foundPeer)
+    return None
 
-    def sendRequest(self, index, offset, length):
+    def sendRequest(peer, index, offset, length):
         header = struct.pack('>I', 13)
         id = '\x06'
         index = struct.pack('>I', index)
@@ -105,33 +92,29 @@ class BittorrentParser(object):
         self.socket.send(request)
         self.buffer = self.socket.recv(2**14)
 
-    def process_message(self):
-        while self.buffer:
-            msgSize = self.convertBytesToDecimal(self.buffer[0:4], 3)
-            msgCode = int(ord(self.buffer[4:5]))
-            payload = self.buffer[5:4+msgSize]
-
-            while len(payload) < msgSize-1:
-                self.buffer = self.buffer + self.socket.recv(2**14)
-                payload = self.buffer[5:4+msgSize]
-
-            self.buffer = self.buffer[msgSize+4:]
-
+    def process_message(peer, peerMngr, peersConnected):
+        while peer.bufferRead:
+            msgSize = self.convertBytesToDecimal(peer.bufferRead[0:4], 3)
+            msgCode = int(ord(peer.bufferRead[4:5]))
+            payload = peer.bufferRead[5:4+msgSize]
+            if len(payload) < msgSize-1:
+                # Message is not complete. Return
+                return
+            peer.bufferRead = peer.bufferRead[msgSize+4:]
             if not msgCode:
-                # Keep Alive
-                self.buffer += self.socket.recv(2**14)
+                # Keep Alive. Keep the connection alive.
                 continue
-
             elif msgCode == 0:
                 # Choked
-                self.buffer += self.socket.recv(2**14)
+                peer.choked = True
                 continue
             elif msgCode == 1:
                 # Unchoked! send request
                 print "Unchoked! Downloading file.",
-                nextBlock = self.findNextBlock()
+                peer.choked = False
+                nextBlock = findNextBlock(peerMngr, peersConnected)
                 if not nextBlock:
-                    # Nothing left to process
+                    # Nothing left to process. Need to return a done statment
                     return
                 index, offset, length = nextBlock
                 self.sendRequest(index, offset, length)
@@ -158,11 +141,11 @@ class BittorrentParser(object):
                 index, offset, length = nextBlock
                 self.sendRequest(index, offset, length)
 
-            if not self.buffer and not self.sentInterested:
+            if not peer.bufferRead and not self.sentInterested:
                 print ("Bitfield initalized. "
                        "Sending peer we are interested...")
                 self.socket.send(self.makeInterestedMessage())
-                self.buffer += self.socket.recv(2**14)
+                peer.bufferRead += self.socket.recv(2**14)
                 self.sentInterested=True
 
 def generateMoreData(myBuffer, pieces):
@@ -204,10 +187,12 @@ def main():
         sys.exit(2)
 
     trackerFile = sys.argv[1]
-    peers = PeerManager(trackerFile)
-    mySocket, message = peers.connectToPeers()
-    if mySocket==None:
-        raise RuntimeError("could not find peer")
+    peerMgnr = PeerManager(trackerFile)
+    reactor = Reactor(peerMgnr)
+    """
+    torrentParser = BittorrentParser(peerMngr)
+
+
     bittorrentParser = BittorrentParser(mySocket, message, peers)
     bittorrentParser.process_message()
     print "Writing to File..."
@@ -215,6 +200,7 @@ def main():
                 peers.tracker['info']['name'],
                 bittorrentParser.pieces)
     print "Done!"
+    """
 
 if __name__ == "__main__":
     main()
