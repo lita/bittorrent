@@ -45,6 +45,13 @@ class PeerManager(object):
         self.generatePieces()
         self.pieceTracker = BitArray(len(self.pieces))
         self.peer_id = '-lita38470993887523-'
+        self.piecesInProgress = []
+
+    def isTorrentFinishedDownloading(self):
+        for i in range(len(self.pieceTracker)):
+            if not self.pieceTraker[i]:
+                return False
+        return True
 
     def generatePieces(self):
         print "Initalizing..."
@@ -168,10 +175,12 @@ class Peer(object):
         self.port = port
         self.choked = False
         self.bitField = None
-        self.handshake = False
+        self.sentInterested = False
         self.socket = socket
         self.bufferWrite = self.makeHandshakeMsg(infoHash, peer_id)
         self.bufferRead = ''
+        self.handshake = False
+        self.pieceDownloading = -1
 
     def makeHandshakeMsg(self, infoHash, peer_id):
         pstrlen = '\x13'
@@ -182,7 +191,7 @@ class Peer(object):
 
         return handshake
 
-    def setBitFiled(self, payload):
+    def setBitField(self, payload):
         # TODO: check to see if valid bitfield. Aka the length of the bitfield matches with the 'on' bits. 
         # COULD BE MALICOUS and you should drop the connection. 
         # Need to calculate the length of the bitfield. otherwise, drop connection.

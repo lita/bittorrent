@@ -21,6 +21,7 @@ class Piece(object):
         self.pieceSize = pieceSize
         self.pieceHash = pieceHash
         self.finished = False
+        self.hashGood = False
         self.num_blocks = int(math.ceil(float(pieceSize)/BLOCK_SIZE))
         self.bitField = BitArray(self.num_blocks)
         self.blocks = []
@@ -46,13 +47,15 @@ class Piece(object):
 
         self.blocks[index].addPayload(data)
         self.bitField[index] = True
-        finished = all(self.bitField)
-        if finished:
-            if self.checkHash():
-                self.finished = True
-            else:
-                # Hash doesn't match. Need to redownload and set the the bitField.
-                self.bitField = BitArray(self.num_blocks)
+        self.finished = all(self.bitField)
+        if self.finished:
+            self.checkHash()
+    
+    def reset(self):
+        """Reset the piece. Used when the data is bad and need to redownload"""
+        self.bitField = BitArray(self.num_blocks)
+        self.hashGood = False
+        self.finished = False
 
     def checkHash(self):
         allData = ''
@@ -62,9 +65,7 @@ class Piece(object):
         hashedData = hashlib.sha1(allData).digest()
         if hashedData == self.pieceHash:
             self.block = allData
-            return True
-        else:
-            return False
+            self.hashGood = True
 
 class Blocks(object):
     def __init__(self, size, offset):
