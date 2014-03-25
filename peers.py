@@ -1,4 +1,3 @@
-
 import hashlib
 import socket
 import math
@@ -9,31 +8,27 @@ from bitstring import BitArray
 
 from pieces import Piece
 
-
-HEADER_SIZE = 28 # This is just the pstrlen+pstr+reserved
-
-
 class PeerManager(object):
     """
     Holds the tracker information and the list of ip addresses and ports.
     """
+
     def __init__(self, trackerFile):
         """
         Initalizes the PeerManager, which handles all the peers it is connected
-        to, and keeps track of what pieces need to be downloaded. 
+        to.
 
         Input:
         trackerFile -- takes in a .torrent tracker file.
 
-        Class Variables:
+        Instance Variables:
         self.peer_id     -- My id that I give to other peers.
         self.peers       -- List of peers I am currently connected to. Contains 
                             Peer Objects
         self.pieces      -- List of Piece objects that store the actual data we
                             we are downloading.
-        self.pieceTraker -- A bitfield that keeps track of what piece we have 
-                            vs what we don't have.
-
+        self.tracker     -- The decoded tracker dictionary.
+        self.infoHash    -- SHA1 hash of the file we are downloading.
         """
         self.peer_id = '-lita38470993824756-'
         self.peers = []
@@ -43,24 +38,23 @@ class PeerManager(object):
         self.infoHash = hashlib.sha1(bencodeInfo).digest()
         self.getPeers()
         self.generatePieces()
-        self.pieceTracker = BitArray(len(self.pieces))
         self.peer_id = '-lita38470993887523-'
-        self.piecesInProgress = []
 
     def isTorrentFinishedDownloading(self):
-        for i in range(len(self.pieceTracker)):
-            if not self.pieceTraker[i]:
-                return False
-        return True
+        return all([x.finished for x in self.pieces])
 
     def generatePieces(self):
         print "Initalizing..."
-        files = self.tracker['info']['files']
-        totalLength = 0
         pieceHashes = self.tracker['info']['pieces']
         pieceLength = self.tracker['info']['piece length']
-        totalLength = sum([file['length'] for file in files])
-        self.numPieces =  int(math.ceil(float(totalLength)/pieceLength))
+        if 'files' in self.tracker['info']:
+            files = self.tracker['info']['files']
+            totalLength = sum([file['length'] for file in files])
+            self.numPieces =  int(math.ceil(float(totalLength)/pieceLength))
+        else:
+            totalLength = self.tracker['info']['length']
+            self.numPieces = int(math.ceil(float(totalLength)/pieceLength))
+
         counter = totalLength
         for i in range(self.numPieces):
             if i == self.numPieces-1:
@@ -95,7 +89,6 @@ class PeerManager(object):
             raise RuntimeError(errorMsg)
 
         result = bencode.bdecode(response.content)
-        print result
 
         for chunk in self.chunkToSixBytes(result['peers']):
             ip = []
@@ -110,55 +103,18 @@ class PeerManager(object):
             peer = Peer(ip, port, mySocket, self.infoHash, self.peer_id)
             self.peers.append(peer)
 
-    def setupPeers(self):
-        self.peers = self.getPeers()
+    def findNextBlock(self, peer):
+        pieceFound = None
+        for i, piece in enumerate(self.pieces):
+            for blockIndex in range(piece.num_blocks):
+                if not piece.blockTracker[blockIndex]:
+                    return (i, 
+                            piece.blocks[blockIndex].offset,
+                            piece.blocks[blockIndex].size)
+        return None
 
-        for peer in self.peers:
-            
-            
-            #peer.socket(mySocket)
-            """
-            try:
-                mySocket.connect((peer.ip, peer.port))
-            except socket.timeout:
-                print ("Connection Time out. \n" 
-                       "IP: %s \n" 
-                       "Port: %s ") % (peer.ip, peer.port)
-                mySocket.close()
-                continue
-            except socket.error as err:
-                print ("Failed connection.\n" 
-                       "IP: %s \n"
-                       "Port: %s") % (peer.ip, peer.port)
-                
-                print "Error: %s" % err
-                mySocket.close()
-                continue
-           
-            handshake = self.makeHandshakeMsg()
-            mySocket.send(handshake)
-            
-            try:
-                response = mySocket.recv(1028)
-            except socket.error as err:
-                print "Failed connection. IP: %s Port: %s" %  (peer.ip, peer.port)
-                print "Error: %s" % err
-                mySocket.close()
-                continue            
-
-            print "Conncted to IP: %s Port: %s" %  (peer.ip, peer.port)
-            message = self.checkValidPeer(response)
-            if message:
-                print "Handshake Valid"
-                return (mySocket, message)
-            else:
-                print "Info Hash does not match. Moving to next peer..."
-                mySocket.close()
-                continue
-            mySocket.close()
-            """
-            self.peers[mySocket] = peer
-        print self.peers
+    def checkIfDoneDownloading(self):
+        return all([x.finished for x in self.pieces])
 
 class Peer(object):
     """
@@ -169,6 +125,11 @@ class Peer(object):
     self.choked - sets if the peer is choked or not.
     self.bitField - What pieces the peer has.
     self.socket - Socket object
+    self.bufferWrite - Buffer that needs to be sent out to the Peer. When we 
+                       instantiate a Peer object, it is automatically filled 
+                       with a handshake message.
+    self.bufferRead - Buffer that needs to be read and parsed on our end.
+    self.handshake - If we sent out a handshake.
     """
     def __init__(self, ip, port, socket, infoHash, peer_id):
         self.ip = ip
@@ -180,7 +141,6 @@ class Peer(object):
         self.bufferWrite = self.makeHandshakeMsg(infoHash, peer_id)
         self.bufferRead = ''
         self.handshake = False
-        self.pieceDownloading = -1
 
     def makeHandshakeMsg(self, infoHash, peer_id):
         pstrlen = '\x13'
@@ -192,14 +152,12 @@ class Peer(object):
         return handshake
 
     def setBitField(self, payload):
-        # TODO: check to see if valid bitfield. Aka the length of the bitfield matches with the 'on' bits. 
+        # TODO: check to see if valid bitfield. Aka the length of the bitfield 
+        # matches with the 'on' bits. 
         # COULD BE MALICOUS and you should drop the connection. 
-        # Need to calculate the length of the bitfield. otherwise, drop connection.
+        # Need to calculate the length of the bitfield. otherwise, drop 
+        # connection.
         self.bitField = BitArray(bytes=payload)
 
     def fileno(self):
         return self.socket.fileno()
-
-    #own buffer send and recevice. 
-    # make handshake
-

@@ -8,6 +8,7 @@ from bitstring import BitArray
 import bencode
 import requests
 
+from peers import PeerManager
 import pdb
 
 HEADER_SIZE = 28 # This is just the pstrlen+pstr+reserved
@@ -38,34 +39,12 @@ def convertBytesToDecimal(headerBytes, power):
 def handleHave(peer, payload):
     index = convertBytesToDecimal(payload, 3)
     print "Handling Have"
-    print "Index: %d" % index
     peer.bitField[index] = True
 
 def makeInterestedMessage():
     interested = '\x00\x00\x00\x01\x02'
 
     return interested
-
-def findNextBlock(peer, peerMngr):
-    piece = None
-    index = -1
-    for i in range(len(peerMngr.pieceTracker)):
-        if not peerMngr.pieceTracker[i] and not i in peerMngr.piecesInProgress:
-            # Check to see if peer has this piece
-            if peer.bitField[i]:
-                piece = peerMngr.pieces[i]
-                index = i
-                # Put it in the list of currently running
-                peerMngr.piecesInProgress.append(i)
-                peer.pieceDownloading = i
-                break
-    if not piece:
-        # Peer does not have pieces we want
-        return None
-
-    for j in range(piece.num_blocks):
-        if not piece.bitField[j]:
-            return (index, piece.blocks[j].offset, piece.blocks[j].size)
 
 def sendRequest(index, offset, length):
     header = struct.pack('>I', 13)
@@ -78,8 +57,6 @@ def sendRequest(index, offset, length):
 
 def process_message(peer, peerMngr):
     while len(peer.bufferRead) > 3:
-        print "Ip: " + peer.ip
-        print "Buffer: " + str(repr(peer.bufferRead))
         if not peer.handshake:
             if not checkValidPeer(peer, peerMngr.infoHash):
                 return False
@@ -92,23 +69,13 @@ def process_message(peer, peerMngr):
                 # Keep alive
                 return True
             return True 
-        try:
-            msgCode = int(ord(peer.bufferRead[4:5]))
-        except:
-            pdb.set_trace()
         
+        msgCode = int(ord(peer.bufferRead[4:5]))
         payload = peer.bufferRead[5:4+msgSize]
-
-        print "MsgCode: " + str(msgCode)
-
         if len(payload) < msgSize-1:
             # Message is not complete. Return
             return True
-
         peer.bufferRead = peer.bufferRead[msgSize+4:]
-        print "New Buffer: " + str(repr(peer.bufferRead))
-        print " "
-        
         if not msgCode:
             # Keep Alive. Keep the connection alive.
             continue
@@ -118,11 +85,10 @@ def process_message(peer, peerMngr):
             continue
         elif msgCode == 1:
             # Unchoked! send request
-            print "Unchoked! Downloading file.",
+            print "Unchoked! Finding block",
             peer.choked = False
-            nextBlock = findNextBlock(peer, peerMngr)
+            nextBlock = peerMngr.findNextBlock(peer)
             if not nextBlock:
-                # Couldn't find a block. Return False
                 return False
             index, offset, length = nextBlock
             peer.bufferWrite += sendRequest(index, offset, length)
@@ -139,19 +105,17 @@ def process_message(peer, peerMngr):
             data = payload[8:]
             piece = peerMngr.pieces[index]
 
-            piece.addBlock(offset, data)
-            if piece.finished and not piece.hashGood:
-                piece.reset()
+            result = piece.addBlock(offset, data)
+
+            # Adding a block was not successful. Disconnect from peer.
+            if not result:
                 return False
-            if piece.finished and piece.hashGood:
-                peerMngr.pieceTracker[index] = 1
-                peerMngr.piecesInProgress.remove(index)
-            nextBlock = findNextBlock(peer, peerMngr)
+
+            nextBlock = peerMngr.findNextBlock(peer)
+
             if not nextBlock:
-                removePiece = peer.pieceDownloading 
-                if removePiece in peerMngr.piecesInProgress:
-                    peerMngr.piecesInProgress.remove(removePiece)
                 return False
+
             index, offset, length = nextBlock
             peer.bufferWrite = sendRequest(index, offset, length)
 
@@ -170,13 +134,12 @@ def generateMoreData(myBuffer, pieces):
         else:
             raise ValueError('Pieces was corrupted. Did not download piece properly.')
 
-def writeToFile(files, dirs, pieces):
+def writeToMultipleFiles(files, path, pieces):
     bufferGenerator = None
     myBuffer = ''
-    if not os.path.exists('./' + dirs):
-        os.makedirs('./'+dirs)
+    
     for f in files:
-        fileObj = open('./' + dirs + '/' + f['path'][0], 'wb')
+        fileObj = open(path + f['path'][0], 'wb')
         length = f['length']
 
         if not bufferGenerator:
@@ -189,4 +152,23 @@ def writeToFile(files, dirs, pieces):
         myBuffer = myBuffer[length:]
         fileObj.close()
 
+def writeToFile(file, length, pieces):
+    fileObj = open('./' + file, 'wb')
+    myBuffer = ''
+   
+    bufferGenerator = generateMoreData(myBuffer, pieces)
 
+    while length > len(myBuffer):
+        myBuffer = next(bufferGenerator)
+
+    fileObj.write(myBuffer[:length])
+    fileObj.close()
+
+def write(info, pieces):
+    if 'files' in info:
+        path = './'+ info['name'] + '/'
+        if not os.path.exists(path):
+            os.makedirs(path)
+        writeToMultipleFiles(info['files'], path, pieces)    
+    else:
+        writeToFile(info['name'], info['length'], pieces)
