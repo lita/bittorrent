@@ -1,6 +1,7 @@
 import hashlib
 import socket
 import math
+from collections import deque
 
 import bencode
 import requests
@@ -8,12 +9,14 @@ from bitstring import BitArray
 
 from pieces import Piece
 
+import pdb
+
 class PeerManager(object):
     """
     Holds the tracker information and the list of ip addresses and ports.
     """
 
-    def __init__(self, trackerFile):
+    def __init__(self, trackerFile, shared_mem):
         """
         Initalizes the PeerManager, which handles all the peers it is connected
         to.
@@ -30,18 +33,17 @@ class PeerManager(object):
         self.tracker     -- The decoded tracker dictionary.
         self.infoHash    -- SHA1 hash of the file we are downloading.
         """
-        self.peer_id = '-lita38470993824756-'
+        self.peer_id = '0987654321098765432-'
         self.peers = []
-        self.pieces = []
+        self.pieces = deque([])
         self.tracker = bencode.bdecode(open(trackerFile,'rb').read())
         bencodeInfo = bencode.bencode(self.tracker['info'])
         self.infoHash = hashlib.sha1(bencodeInfo).digest()
         self.getPeers()
         self.generatePieces()
-        self.peer_id = '-lita38470993887523-'
-
-    def isTorrentFinishedDownloading(self):
-        return all([x.finished for x in self.pieces])
+        self.shared_mem = shared_mem
+        self.curPiece = 0
+        self.curBlock = 0
 
     def generatePieces(self):
         print "Initalizing..."
@@ -56,6 +58,7 @@ class PeerManager(object):
             self.numPieces = int(math.ceil(float(totalLength)/pieceLength))
 
         counter = totalLength
+        self.totalLength = totalLength
         for i in range(self.numPieces):
             if i == self.numPieces-1:
                 self.pieces.append(Piece(i, counter, pieceHashes[0:20]))
@@ -63,6 +66,7 @@ class PeerManager(object):
                 self.pieces.append(Piece(i, pieceLength, pieceHashes[0:20]))
                 counter -= pieceLength
                 pieceHashes = pieceHashes[20:]
+        
 
     def chunkToSixBytes(self, peerString):
         """
@@ -75,12 +79,24 @@ class PeerManager(object):
                 raise IndexError("Size of the chunk was not six bytes.")
             yield chunk
 
+    def findHTTPServer(self):
+        annouceList = self.tracker['announce-list']
+        return [x[0] for x in annouceList if x[0].startswith('http')]
+
     def getPeers(self):
         # TODO: move the self.infoHash to init if we need it later.
         params = {'info_hash': self.infoHash,
                   'peer_id': self.peer_id,
                   'left': str(self.tracker['info']['piece length'])}
-        response = requests.get(self.tracker['announce'], params=params)
+
+        announce = self.tracker['announce']
+        if not announce.startswith('http'):
+            result = self.findHTTPServer()
+            if result == []:
+                raise Exception("Could not find a valid HTTP tracker.")
+            else:
+                announce = result[0]
+        response = requests.get(announce, params=params)
 
         if response.status_code > 400:
             errorMsg = ("Failed to connect to tracker.\n"
@@ -104,17 +120,22 @@ class PeerManager(object):
             self.peers.append(peer)
 
     def findNextBlock(self, peer):
+        #TODO make a better algorithm to find a the next block faster
         pieceFound = None
-        for i, piece in enumerate(self.pieces):
-            for blockIndex in range(piece.num_blocks):
+        for i in xrange(self.curPiece, len(self.pieces)):
+            if not peer.bitField[i]:
+                continue
+            piece = self.pieces[i]
+            for blockIndex in range(self.curBlock, piece.num_blocks):
                 if not piece.blockTracker[blockIndex]:
+                    #piece.blockTracker[blockIndex] = 1
                     return (i, 
                             piece.blocks[blockIndex].offset,
                             piece.blocks[blockIndex].size)
         return None
 
     def checkIfDoneDownloading(self):
-        return all([x.finished for x in self.pieces])
+        return all(x.finished for x in self.pieces)
 
 class Peer(object):
     """
@@ -161,3 +182,12 @@ class Peer(object):
 
     def fileno(self):
         return self.socket.fileno()
+
+class HTTPObj(object):
+    def __init__(self):
+        pass
+
+    def onProcess(self):
+        pass
+    def fileno(self):
+        pass 

@@ -40,20 +40,7 @@ class Piece(object):
         self.finished = False
         self.num_blocks = int(math.ceil(float(pieceSize)/BLOCK_SIZE))
         self.blockTracker = BitArray(self.num_blocks)
-        self.blocks = []
-        self.generateBlocks()
-
-    def generateBlocks(self):
-        offset = 0
-        for i in range(self.num_blocks):
-            if i == self.num_blocks-1: 
-                # Last piece. Need to handle it specially.
-                block = Blocks(self.pieceSize-offset, offset)
-            else:
-                block = Blocks(BLOCK_SIZE, offset)
-
-            self.blocks.append(block)
-            offset += BLOCK_SIZE
+        self.blocks = [False]*self.num_blocks
 
     def addBlock(self, offset, data):
         if offset == 0:
@@ -61,10 +48,13 @@ class Piece(object):
         else:
             index = offset/BLOCK_SIZE
 
-        self.blocks[index].addPayload(data)
-        self.blockTracker[index] = 1
+        if not self.blockTracker[index]:
+            self.blocks[index] = data
+            self.blockTracker[index] = True
+
         self.finished = all(self.blockTracker)
 
+        # Need to do something here where I send the piece itself    
         if self.finished:
             return self.checkHash()
 
@@ -85,15 +75,5 @@ class Piece(object):
             self.block = allData
             return True
         else:
-            piece.reset()
+            self.piece.reset()
             return False
-
-class Blocks(object):
-    """Block object that stores the data and offset."""
-    def __init__(self, size, offset):
-        self.size = size
-        self.offset = offset
-        self.data = None
-
-    def addPayload(self, payload):
-        self.data = payload

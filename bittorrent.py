@@ -3,12 +3,14 @@ import struct
 import math
 import sys
 import os
+import time
 
 from bitstring import BitArray
 import bencode
 import requests
 
 from peers import PeerManager
+import pieces
 import pdb
 
 HEADER_SIZE = 28 # This is just the pstrlen+pstr+reserved
@@ -55,7 +57,20 @@ def sendRequest(index, offset, length):
     request = header + id + index + offset + length
     return request
 
-def process_message(peer, peerMngr):
+def pipeRequests(peer, peerMngr):
+    if len(peer.bufferWrite) > 0:
+        return True
+
+    for i in xrange(10):
+        nextBlock = peerMngr.findNextBlock(peer)
+
+        if not nextBlock:
+            return 
+
+        index, offset, length = nextBlock
+        peer.bufferWrite = sendRequest(index, offset, length)
+        
+def process_message(peer, peerMngr, shared_mem):
     while len(peer.bufferRead) > 3:
         if not peer.handshake:
             if not checkValidPeer(peer, peerMngr.infoHash):
@@ -87,11 +102,7 @@ def process_message(peer, peerMngr):
             # Unchoked! send request
             print "Unchoked! Finding block",
             peer.choked = False
-            nextBlock = peerMngr.findNextBlock(peer)
-            if not nextBlock:
-                return False
-            index, offset, length = nextBlock
-            peer.bufferWrite += sendRequest(index, offset, length)
+            pipeRequests(peer, peerMngr)
         elif msgCode == 4:
             handleHave(peer, payload)
         elif msgCode == 5:
@@ -99,25 +110,22 @@ def process_message(peer, peerMngr):
         elif msgCode == 7:
             print ".",
             sys.stdout.flush()
-
             index = convertBytesToDecimal(payload[0:4], 3)
             offset = convertBytesToDecimal(payload[4:8], 3)
             data = payload[8:]
-            piece = peerMngr.pieces[index]
-
+            piece = peerMngr.pieces[index]            
             result = piece.addBlock(offset, data)
 
             # Adding a block was not successful. Disconnect from peer.
             if not result:
                 return False
-
-            nextBlock = peerMngr.findNextBlock(peer)
-
-            if not nextBlock:
-                return False
-
-            index, offset, length = nextBlock
-            peer.bufferWrite = sendRequest(index, offset, length)
+            if piece.finished:
+                if index == peerMngr.curPiece:
+                    peerMngr.curBlock = 0
+                    peerMngr.curPiece += 1
+                    peerMngr.shared_mem.put((piece.pieceIndex, piece.blocks))
+            pipeRequests(peer, peerMngr)
+            
 
         if not peer.sentInterested:
             print ("Bitfield initalized. "
@@ -165,6 +173,7 @@ def writeToFile(file, length, pieces):
     fileObj.close()
 
 def write(info, pieces):
+    import pudb; pudb.set_trace()
     if 'files' in info:
         path = './'+ info['name'] + '/'
         if not os.path.exists(path):
