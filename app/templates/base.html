@@ -1,0 +1,28 @@
+<html>
+  <head>
+    <link href="/static/css/main.css" rel="stylesheet">
+    <script src="http://code.jquery.com/jquery-latest.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="//vjs.zencdn.net/4.5/video-js.css" rel="stylesheet">
+    <script src="//vjs.zencdn.net/4.5/video.js"></script>
+    {% if title %}
+    <title>{{title}}</title>
+    {% else %}
+    <title>Streamer</title>
+    {% endif %}
+  </head>
+  <body>
+    <a href="/index">Home</a>
+    <hr class='dotted'>
+    <h1>Lita's Streamer</h1>
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    {% for message in messages %}
+        <div>{{ message|safe }} <div>
+    {% endfor %}
+    <br>
+    {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </body>
+</html>
