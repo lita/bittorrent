@@ -41,6 +41,10 @@ class Piece(object):
         self.num_blocks = int(math.ceil(float(pieceSize)/BLOCK_SIZE))
         self.blockTracker = BitArray(self.num_blocks)
         self.blocks = [False]*self.num_blocks
+        self.blocksSoFar = 0
+
+    def calculateLastSize(self):
+        return self.pieceSize - ((self.num_blocks-1)*(BLOCK_SIZE))
 
     def addBlock(self, offset, data):
         if offset == 0:
@@ -51,6 +55,7 @@ class Piece(object):
         if not self.blockTracker[index]:
             self.blocks[index] = data
             self.blockTracker[index] = True
+            self.blocksSoFar += 1
 
         self.finished = all(self.blockTracker)
 
@@ -66,9 +71,7 @@ class Piece(object):
         self.finished = False
 
     def checkHash(self):
-        allData = ''
-        for block in self.blocks:
-            allData += block.data
+        allData = ''.join(self.blocks)
 
         hashedData = hashlib.sha1(allData).digest()
         if hashedData == self.pieceHash:

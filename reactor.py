@@ -64,5 +64,5 @@ class Reactor(threading.Thread):
 
             if len(self.peerMngr.peers) <= 0:
                 raise Exception("NO MO RE PEERS")
-        bittorrent.write(self.peerMngr.tracker['info'], self.peerMngr.pieces)       
+        bittorrent.write(self.peerMngr.tracker['info'], self.peerMngr)       
         return

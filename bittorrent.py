@@ -11,6 +11,7 @@ import requests
 
 from peers import PeerManager
 import pieces
+
 import pdb
 
 HEADER_SIZE = 28 # This is just the pstrlen+pstr+reserved
@@ -63,7 +64,6 @@ def pipeRequests(peer, peerMngr):
 
     for i in xrange(10):
         nextBlock = peerMngr.findNextBlock(peer)
-
         if not nextBlock:
             return 
 
@@ -113,19 +113,26 @@ def process_message(peer, peerMngr, shared_mem):
             index = convertBytesToDecimal(payload[0:4], 3)
             offset = convertBytesToDecimal(payload[4:8], 3)
             data = payload[8:]
-            piece = peerMngr.pieces[index]            
+            if index != peerMngr.curPiece.pieceIndex:
+                # Need to handle the case where we get multiple pieces back of 
+                # the same kind
+                return True
+
+            piece = peerMngr.curPiece           
             result = piece.addBlock(offset, data)
 
             # Adding a block was not successful. Disconnect from peer.
             if not result:
                 return False
-            if piece.finished:
-                if index == peerMngr.curPiece:
-                    peerMngr.curBlock = 0
-                    peerMngr.curPiece += 1
-                    peerMngr.shared_mem.put((piece.pieceIndex, piece.blocks))
-            pipeRequests(peer, peerMngr)
             
+            if piece.finished:
+                peerMngr.numPiecesSoFar += 1
+                if peerMngr.numPiecesSoFar < peerMngr.numPieces:
+                    peerMngr.curPiece = peerMngr.pieces.popleft()
+                peerMngr.shared_mem.put((piece.pieceIndex, ''.join(piece.blocks)))
+                print "Finished Downloading piece: %d" % piece.pieceIndex
+                
+            pipeRequests(peer, peerMngr)
 
         if not peer.sentInterested:
             print ("Bitfield initalized. "
@@ -134,15 +141,16 @@ def process_message(peer, peerMngr, shared_mem):
             peer.sentInterested = True
     return True
 
-def generateMoreData(myBuffer, pieces):
-    for piece in pieces:
-        if piece.block:
-            myBuffer += piece.block
+def generateMoreData(myBuffer, peerMngr):
+    while not peerMngr.shared_mem.empty():
+        index, data = peerMngr.shared_mem.get()
+        if data:
+            myBuffer += data
             yield myBuffer
         else:
             raise ValueError('Pieces was corrupted. Did not download piece properly.')
 
-def writeToMultipleFiles(files, path, pieces):
+def writeToMultipleFiles(files, path, peerMngr):
     bufferGenerator = None
     myBuffer = ''
     
@@ -151,7 +159,7 @@ def writeToMultipleFiles(files, path, pieces):
         length = f['length']
 
         if not bufferGenerator:
-            bufferGenerator = generateMoreData(myBuffer, pieces)
+            bufferGenerator = generateMoreData(myBuffer, peerMngr)
 
         while length > len(myBuffer):
             myBuffer = next(bufferGenerator)
@@ -160,11 +168,11 @@ def writeToMultipleFiles(files, path, pieces):
         myBuffer = myBuffer[length:]
         fileObj.close()
 
-def writeToFile(file, length, pieces):
+def writeToFile(file, length, peerMngr):
     fileObj = open('./' + file, 'wb')
     myBuffer = ''
    
-    bufferGenerator = generateMoreData(myBuffer, pieces)
+    bufferGenerator = generateMoreData(myBuffer, peerMngr)
 
     while length > len(myBuffer):
         myBuffer = next(bufferGenerator)
@@ -172,12 +180,11 @@ def writeToFile(file, length, pieces):
     fileObj.write(myBuffer[:length])
     fileObj.close()
 
-def write(info, pieces):
-    import pudb; pudb.set_trace()
+def write(info, peerMngr):
     if 'files' in info:
         path = './'+ info['name'] + '/'
         if not os.path.exists(path):
             os.makedirs(path)
-        writeToMultipleFiles(info['files'], path, pieces)    
+        writeToMultipleFiles(info['files'], path, peerMngr)    
     else:
-        writeToFile(info['name'], info['length'], pieces)
+        writeToFile(info['name'], info['length'], peerMngr)

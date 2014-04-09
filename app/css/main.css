@@ -1,0 +1,80 @@
+@import url(http://fonts.googleapis.com/css?family=Reenie+Beanie);
+@import url(http://fonts.googleapis.com/css?family=Josefin+Sans);
+
+body {
+    background: #FFF;
+    font-family: 'Josefin Sans', sans-serif;
+    font-size: 19px ;
+    line-height: 1.429;
+    margin: 0;
+    padding-left: 20px;
+    padding-right:20px;
+    text-align: center;
+    height: 95%;
+    width: 95%;
+}
+
+/* Headings */
+h1 {font-size: 1.5em }
+h2 {font-size: 1.489em} /* 22px */
+h3 {font-size: 1.429em} /* 20px */
+h4 {font-size: 1.286em} /* 18px */
+h5 {font-size: 1.143em} /* 16px */
+h6 {font-size: 1em}     /* 14px */
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 400;
+    line-height: .8;
+    margin-bottom: .8em;
+    font-family: 'Reenie Beanie';
+    font-style: normal;
+    
+}
+
+h3, h4, h5, h6 { margin-top: .8em; }
+
+.dotted {
+    border-top:1px dashed #000;
+}
+
+.container {
+    vertical-align: middle;
+    text-align: center
+}
+
+.button {
+    -moz-box-shadow:inset 0px 0px 0px -1px #fbafe3;
+    -webkit-box-shadow:inset 0px 0px 0px -1px #fbafe3;
+    box-shadow:inset 0px 0px 0px -1px #fbafe3;
+    background-color:#ff5bb0;
+    -webkit-border-top-left-radius:23px;
+    -moz-border-radius-topleft:23px;
+    border-top-left-radius:23px;
+    -webkit-border-top-right-radius:23px;
+    -moz-border-radius-topright:23px;
+    border-top-right-radius:23px;
+    -webkit-border-bottom-right-radius:23px;
+    -moz-border-radius-bottomright:23px;
+    border-bottom-right-radius:23px;
+    -webkit-border-bottom-left-radius:23px;
+    -moz-border-radius-bottomleft:23px;
+    border-bottom-left-radius:23px;
+    text-indent:0px;
+    border:1px solid #ee1eb5;
+    display:inline-block;
+    color:#ffffff;
+    font-size:18px;
+    text-decoration:none;
+    text-align:center;
+    text-shadow:1px 1px 0px #c70067;
+    font-family: 'Reenie Beanie';
+    font-style: normal;
+}
+
+.button:hover {
+    background-color:#ef027d;
+
+}.button:active {
+    position:relative;
+    top:1px;
+}
