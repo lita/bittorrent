@@ -11,8 +11,12 @@ import requests
 
 from peers import PeerManager
 import pieces
+import logging
 
-import pdb
+logging = logging.getLogger('bittorrent')
+
+OKBLUE = '\033[94m'
+RESET_SEQ = "\033[0m"
 
 HEADER_SIZE = 28 # This is just the pstrlen+pstr+reserved
 # TODO make the parser stateless and a parser for each object 
@@ -27,7 +31,7 @@ def checkValidPeer(peer, infoHash):
     if peerInfoHash == infoHash:
         peer.bufferRead = peer.bufferRead[HEADER_SIZE+len(infoHash)+20:]
         peer.handshake = True
-        print "Handshake Valid"
+        logging.debug("Handshake Valid")
         return True
     else:
         return False
@@ -41,7 +45,7 @@ def convertBytesToDecimal(headerBytes, power):
 
 def handleHave(peer, payload):
     index = convertBytesToDecimal(payload, 3)
-    print "Handling Have"
+    logging.debug("Handling Have")
     peer.bitField[index] = True
 
 def makeInterestedMessage():
@@ -100,7 +104,7 @@ def process_message(peer, peerMngr, shared_mem):
             continue
         elif msgCode == 1:
             # Unchoked! send request
-            print "Unchoked! Finding block",
+            logging.debug("Unchoked! Finding block")
             peer.choked = False
             pipeRequests(peer, peerMngr)
         elif msgCode == 4:
@@ -108,35 +112,32 @@ def process_message(peer, peerMngr, shared_mem):
         elif msgCode == 5:
             peer.setBitField(payload)
         elif msgCode == 7:
-            print ".",
-            sys.stdout.flush()
             index = convertBytesToDecimal(payload[0:4], 3)
             offset = convertBytesToDecimal(payload[4:8], 3)
             data = payload[8:]
             if index != peerMngr.curPiece.pieceIndex:
-                # Need to handle the case where we get multiple pieces back of 
-                # the same kind
+
                 return True
 
             piece = peerMngr.curPiece           
             result = piece.addBlock(offset, data)
 
-            # Adding a block was not successful. Disconnect from peer.
             if not result:
+                logging.debug("Not successful adding block. Disconnecting.")
                 return False
             
             if piece.finished:
                 peerMngr.numPiecesSoFar += 1
                 if peerMngr.numPiecesSoFar < peerMngr.numPieces:
                     peerMngr.curPiece = peerMngr.pieces.popleft()
-                peerMngr.shared_mem.put((piece.pieceIndex, ''.join(piece.blocks)))
-                print "Finished Downloading piece: %d" % piece.pieceIndex
+                peerMngr.shared_mem.put((piece.pieceIndex, piece.blocks))
+                logging.info((OKBLUE + "Downloaded piece: %d " + RESET_SEQ) % piece.pieceIndex)
                 
             pipeRequests(peer, peerMngr)
 
         if not peer.sentInterested:
-            print ("Bitfield initalized. "
-                   "Sending peer we are interested...")
+            logging.debug("Bitfield initalized. "
+                          "Sending peer we are interested...")
             peer.bufferWrite = makeInterestedMessage()
             peer.sentInterested = True
     return True

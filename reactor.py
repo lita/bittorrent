@@ -2,6 +2,7 @@ import socket
 import select
 import sys
 import threading
+import logging
 
 import bittorrent
 from peers import PeerManager
@@ -11,12 +12,19 @@ class Reactor(threading.Thread):
     This is our event loop that makes our program asynchronous. The program
     keeps looping until the file is fully downloaded.
     """
-    def __init__(self, threadID, name, peerMngr, shared_mem):
+    def __init__(self, threadID, name, peerMngr, shared_mem, config):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
         self.peerMngr = peerMngr
         self.shared_mem = shared_mem
+        self.stream = False
+        if config['DEBUG']:
+            logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+        elif config['INFO']:
+            logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+        if config['STREAMING']:
+            self.stream = True
 
     def connect(self):
         for peer in self.peerMngr.peers:
@@ -44,7 +52,7 @@ class Reactor(threading.Thread):
                 try:
                     peer.socket.send(sendMsg)
                 except socket.error as err:
-                    print err
+                    logging.debug(err)
                     self.removePeer(peer)
                     continue 
                 peer.bufferWrite = ''
@@ -53,7 +61,7 @@ class Reactor(threading.Thread):
                 try:
                     peer.bufferRead += peer.socket.recv(1028)
                 except socket.error as err:
-                    print err
+                    logging.debug(err)
                     self.removePeer(peer)
                     continue
                 result = bittorrent.process_message(peer, self.peerMngr, self.shared_mem)
@@ -64,5 +72,6 @@ class Reactor(threading.Thread):
 
             if len(self.peerMngr.peers) <= 0:
                 raise Exception("NO MO RE PEERS")
-        bittorrent.write(self.peerMngr.tracker['info'], self.peerMngr)       
+        if not self.stream:
+            bittorrent.write(self.peerMngr.tracker['info'], self.peerMngr)       
         return

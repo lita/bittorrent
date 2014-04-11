@@ -5,6 +5,9 @@ from urlparse import urlparse
 
 import bencode
 import requests
+import logging
+
+logging = logging.getLogger('scrape')
 
 def make_connection_id_request():
     conn_id = struct.pack('>Q', 0x41727101980)
@@ -27,22 +30,25 @@ def make_announce_input(info_hash, conn_id, peer_id):
     num_want = struct.pack('>i', -1)
     port = struct.pack('>h', 8000)
 
-    return conn_id + action + trans_id + info_hash + peer_id + downloaded + left + uploaded + event + ip + key + num_want + port, trans_id, action
+    msg = (conn_id + action + trans_id + info_hash + peer_id + downloaded + 
+            left + uploaded + event + ip + key + num_want + port)
+
+    return msg, trans_id, action
 
 def send_msg(conn, sock, msg, trans_id, action, size):
     sock.sendto(msg, conn)
     try:
         response = sock.recv(2048)
     except socket.timeout as err:
-        print err
-        print "Connecting again..."
+        logging.debug(err)
+        logging.debug("Connecting again...")
         return send_msg(conn, sock, msg, trans_id, action, size)
     if len(response) < size:
-        print "Did not get full message. Connecting again..."
+        logging.debug("Did not get full message. Connecting again...")
         return send_msg(conn, sock, msg, trans_id, action, size)
 
     if action != response[0:4] or trans_id != response[4:8]:
-        print "Transaction or Action ID did not match. Connecting again..."
+        logging.debug("Transaction or Action ID did not match. Trying again...")
         return send_msg(conn, sock, msg, trans_id, action, size)
 
     return response

@@ -1,26 +1,8 @@
 ==========
-Lita's Bittorrent Client
+Lita's Bittorrent Streamer
 ==========
-
-This program was a learning excerise about networking by writing
-Bittorrent protocols from stratch. It is written in Python.
-
-I used Kristen Widman's blog as a guide. Her posts were extremely helpful. 
-I couldn't have gotten this far without her guide.
-
-Part 1:
-http://www.kristenwidman.com/blog/how-to-write-a-bittorrent-client-part-1
-
-Part 2:
-http://www.kristenwidman.com/blog/how-to-write-a-bittorrent-client-part-2
-
-I also used the Bittorrent Unofficial Spec to format my packets.
-
-https://wiki.theory.org/BitTorrentSpecification
-
-Wireshark was also heavily used while debugging this software.
-
-It is now asynchronous!!!
+This program is written on top of my Bittorrent Client. The bare bones of my 
+Bittorrent Client can be found here: https://github.com/litacho/bittorrent/
 
 ##Installation
 This project is currently in progress so I haven't packaged it yet properly.

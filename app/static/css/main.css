@@ -39,6 +39,8 @@ h3, h4, h5, h6 { margin-top: .8em; }
 
 .container {
     vertical-align: middle;
+    margin: 0 auto;
+    width: 640px;
     text-align: center
 }
 

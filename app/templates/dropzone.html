@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<link href="/static/css/dropzone.css" rel="stylesheet">
+<script src="./static/js/dropzone.js"></script>
+<script>
+    // "myAwesomeDropzone" is the camelized version of the HTML element's ID
+Dropzone.options.myDrop = {
+  paramName: "file", // The name that will be used to transfer the file
+  maxFilesize: 1, // MB
+  accept: function(file, done) {
+    if (file.name == "justinbieber.jpg") {
+      done("Naha, you don't.");
+    }
+    else { done(); }
+  },
+  init: function () {
+    this.on("success", function (file, responseText, e) {
+      if (this.getUploadingFiles().length === 0 && this.getQueuedFiles().length === 0) {
+        //window.location.replace("/index");
+        var response = JSON.parse(responseText);
+        window.location.replace(response.site);
+      }
+    });
+    }
+};
+</script>
+<form action="/upload" method="post" class="dropzone padding" id="myDrop"  enctype="multipart/form-data">
+  <div class="fallback">
+    <input name="file" type="file" />
+  </div>
+</form>
+
+{% endblock %}
