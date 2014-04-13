@@ -18,7 +18,7 @@ class PeerManager(object):
     Holds the tracker information and the list of ip addresses and ports.
     """
 
-    def __init__(self, shared_mem, trackerFile=None, stream=None):
+    def __init__(self, trackerFile=None, stream=None):
         """
         Initalizes the PeerManager, which handles all the peers it is connected
         to.
@@ -48,7 +48,6 @@ class PeerManager(object):
         self.infoHash = hashlib.sha1(bencodeInfo).digest()
         self.getPeers()
         self.generatePieces()
-        self.shared_mem = shared_mem
         self.numPiecesSoFar = 0
 
     def generatePieces(self):

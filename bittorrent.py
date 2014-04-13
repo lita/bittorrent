@@ -130,7 +130,7 @@ def process_message(peer, peerMngr, shared_mem):
                 peerMngr.numPiecesSoFar += 1
                 if peerMngr.numPiecesSoFar < peerMngr.numPieces:
                     peerMngr.curPiece = peerMngr.pieces.popleft()
-                peerMngr.shared_mem.put((piece.pieceIndex, piece.blocks))
+                shared_mem.put((piece.pieceIndex, piece.blocks))
                 logging.info((OKBLUE + "Downloaded piece: %d " + RESET_SEQ) % piece.pieceIndex)
                 
             pipeRequests(peer, peerMngr)
@@ -142,9 +142,9 @@ def process_message(peer, peerMngr, shared_mem):
             peer.sentInterested = True
     return True
 
-def generateMoreData(myBuffer, peerMngr):
-    while not peerMngr.shared_mem.empty():
-        index, data = peerMngr.shared_mem.get()
+def generateMoreData(myBuffer, shared_mem):
+    while not shared_mem.empty():
+        index, data = shared_mem.get()
         if data:
             myBuffer += data
             yield myBuffer

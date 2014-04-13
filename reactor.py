@@ -1,22 +1,21 @@
 import socket
 import select
 import sys
-import threading
+import multiprocessing
 import logging
 
 import bittorrent
 from peers import PeerManager
 
-class Reactor(threading.Thread):
+class Reactor(multiprocessing.Process):
     """ 
     This is our event loop that makes our program asynchronous. The program
     keeps looping until the file is fully downloaded.
     """
     def __init__(self, threadID, name, peerMngr, shared_mem, config):
-        threading.Thread.__init__(self)
+        multiprocessing.Process.__init__(self)
         self.threadID = threadID
         self.name = name
-        self.peerMngr = peerMngr
         self.shared_mem = shared_mem
         self.stream = False
         if config['DEBUG']:
@@ -25,6 +24,7 @@ class Reactor(threading.Thread):
             logging.basicConfig(stream=sys.stdout, level=logging.INFO)
         if config['STREAMING']:
             self.stream = True
+        self.peerMngr = peerMngr
 
     def connect(self):
         for peer in self.peerMngr.peers:
@@ -73,5 +73,5 @@ class Reactor(threading.Thread):
             if len(self.peerMngr.peers) <= 0:
                 raise Exception("NO MO RE PEERS")
         if not self.stream:
-            bittorrent.write(self.peerMngr.tracker['info'], self.peerMngr)       
+            bittorrent.write(self.peerMngr.tracker['info'], shared_mem)       
         return

@@ -1,51 +1,47 @@
-import Queue
+from  multiprocessing import Queue
+from Queue import PriorityQueue
 import sys
 import re
 import json
+import time
+import os
+import logging
+import uuid
 
 from flask import Flask
-from flask import request, Response, redirect, render_template, config, flash, url_for
+from flask import request, Response, redirect
+from flask import render_template, config, flash, url_for
+from flask import session
 
 from peers import PeerManager
 from reactor import Reactor
-import time
+import app.bt_session as bt_session
 
-import os
-import logging
 
 logging = logging.getLogger('flask')
 BOLD_SEQ = "\033[1m"
-
 
 OKGREEN = '\033[92m'
 RESET_SEQ = "\033[0m"
 
 TEST = 600000
-shared_mem = Queue.PriorityQueue()
 
 PATH = '/Users/litacho/Development/bittorrent/app/test/Modern.Family.S05E17.HDTV.x264-2HD.mp4'
-
 
 def usage():
     print ("Usage: bittorent <filename>\n\n"
            "filename is the tracker name you wish"
            "to download your file from.")
 
-
 def initalizeBittorrent(fileStorage):
-    global shared_mem
-    global bittorrentThread
-    global app 
-    peerMngr = PeerManager(shared_mem, stream=fileStorage)
-    app.shared_mem = shared_mem
-    app.file_length = peerMngr.totalLength
-    app.piece_length = peerMngr.tracker['info']['piece length']
-    app.numPieces = peerMngr.numPieces
-    app.buffer = ''
-    app.config.from_object('config')
-    bittorrentThread = Reactor(1, "Thread-1", peerMngr, shared_mem, app.config)
-    bittorrentThread.start()
-
+    bt_session.new()
+    bt_session.set('shared_mem', Queue())
+    bt_session.set('buffer', PriorityQueue())
+    peerMngr = PeerManager(stream=fileStorage)
+    session['file_length'] = peerMngr.totalLength
+    session['numPieces'] = peerMngr.numPieces
+    bt_session.set('bt', Reactor(1, "Thread-1", peerMngr, bt_session.get('shared_mem'), app.config))
+    bt_session.get('bt').start()
 
 #app, bittorrentThread = initalizeBittorrent()
 #bittorrentThread.start()
@@ -54,16 +50,18 @@ app = Flask(__name__)
 app.config.from_object('config')
 bittorrentThread = None
 
-def generate():
+def generate(numPieces, buffer, shared_mem):
     pieceCur = 0
-    while pieceCur < app.numPieces:
-        pieceIndex, blocks = app.shared_mem.get()
+    while pieceCur < numPieces:
+        buffer.put(shared_mem.get())
+        #bt_session.get('buffer').put(bt_session.get('shared_mem').get())
+        pieceIndex, blocks = buffer.get()
         if pieceCur != pieceIndex:
             logging.info("Putting stuff back in: %s   %s" % (pieceIndex, pieceCur))
-            app.shared_mem.put((pieceIndex, blocks))
+            buffer.put((pieceIndex, blocks))
             time.sleep(10)
             continue
-        logging.info((OKGREEN + BOLD_SEQ + "Piece Num: %d Num of stuff in PQueue: %d " + RESET_SEQ) % (pieceIndex, app.shared_mem._qsize()))
+        logging.info((OKGREEN + BOLD_SEQ + "Piece Num: %d Num of stuff in PQueue: %d " + RESET_SEQ) % (pieceIndex, buffer._qsize()))
         #app.buffer += blocks
         yield ''.join(blocks)
         pieceCur += 1
@@ -78,16 +76,16 @@ def generate2():
 @app.route('/stream')
 def streamMovie():
     print request.headers
-    sz = str(app.file_length)
-    return Response(generate(),mimetype='video/mp4',headers={"Content-Type":"video/mp4","Content-Disposition":"inline","Content-Transfer-Enconding":"binary","Content-Length":sz})
+    file_length = str(session['file_length'])
+    return Response(generate(session['numPieces'], bt_session.get('buffer'), bt_session.get('shared_mem')),mimetype='video/mp4',headers={"Content-Type":"video/mp4","Content-Disposition":"inline","Content-Transfer-Enconding":"binary","Content-Length": file_length})
 
 
 @app.route('/index')
 def index():
-    if bittorrentThread == None:
+    if  bt_session.get('bt') is None:
         flash('Torrent file failed')
         return redirect('/drop')
-    elif app.file_length == None:
+    elif 'file_length' not in session:
         index()
     return render_template("index.html")
 
