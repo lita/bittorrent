@@ -73,5 +73,5 @@ class Reactor(multiprocessing.Process):
             if len(self.peerMngr.peers) <= 0:
                 raise Exception("NO MO RE PEERS")
         if not self.stream:
-            bittorrent.write(self.peerMngr.tracker['info'], shared_mem)       
+            bittorrent.write(self.peerMngr.tracker['info'], self.shared_mem)       
         return

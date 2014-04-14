@@ -18,13 +18,17 @@ from reactor import Reactor
 import app.bt_session as bt_session
 
 
+import eventlet
+eventlet.monkey_patch()
+os.environ['PYTHONUNBUFFERED'] = '1'
+
 logging = logging.getLogger('flask')
 BOLD_SEQ = "\033[1m"
 
 OKGREEN = '\033[92m'
 RESET_SEQ = "\033[0m"
 
-TEST = 600000
+tnum = 0
 
 PATH = '/Users/litacho/Development/bittorrent/app/test/Modern.Family.S05E17.HDTV.x264-2HD.mp4'
 
@@ -34,17 +38,20 @@ def usage():
            "to download your file from.")
 
 def initalizeBittorrent(fileStorage):
+    global tnum
     bt_session.new()
     bt_session.set('shared_mem', Queue())
     bt_session.set('buffer', PriorityQueue())
     peerMngr = PeerManager(stream=fileStorage)
     session['file_length'] = peerMngr.totalLength
     session['numPieces'] = peerMngr.numPieces
-    bt_session.set('bt', Reactor(1, "Thread-1", peerMngr, bt_session.get('shared_mem'), app.config))
+    bt_session.set('bt', 
+                    Reactor(1, "Thread-" + str(tnum), 
+                    peerMngr, 
+                    bt_session.get('shared_mem'), app.config))
+    tnum += 1
     bt_session.get('bt').start()
 
-#app, bittorrentThread = initalizeBittorrent()
-#bittorrentThread.start()
 
 app = Flask(__name__)
 app.config.from_object('config')
@@ -61,7 +68,7 @@ def generate(numPieces, buffer, shared_mem):
             buffer.put((pieceIndex, blocks))
             time.sleep(10)
             continue
-        logging.info((OKGREEN + BOLD_SEQ + "Piece Num: %d Num of stuff in PQueue: %d " + RESET_SEQ) % (pieceIndex, buffer._qsize()))
+        logging.info((OKGREEN + BOLD_SEQ + "Piece Num: %d Num of stuff in PQueue: %d " + RESET_SEQ) % (pieceIndex, buffer.qsize()))
         #app.buffer += blocks
         yield ''.join(blocks)
         pieceCur += 1
@@ -77,7 +84,14 @@ def generate2():
 def streamMovie():
     print request.headers
     file_length = str(session['file_length'])
-    return Response(generate(session['numPieces'], bt_session.get('buffer'), bt_session.get('shared_mem')),mimetype='video/mp4',headers={"Content-Type":"video/mp4","Content-Disposition":"inline","Content-Transfer-Enconding":"binary","Content-Length": file_length})
+    return Response(generate(session['numPieces'], 
+                             bt_session.get('buffer'), 
+                             bt_session.get('shared_mem')),
+                    mimetype='video/mp4',
+                    headers={"Content-Type":"video/mp4",
+                             "Content-Disposition":"inline",
+                             "Content-Transfer-Enconding":"binary",
+                             "Content-Length": file_length})
 
 
 @app.route('/index')

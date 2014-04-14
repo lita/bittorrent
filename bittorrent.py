@@ -146,7 +146,7 @@ def generateMoreData(myBuffer, shared_mem):
     while not shared_mem.empty():
         index, data = shared_mem.get()
         if data:
-            myBuffer += data
+            myBuffer += ''.join(data)
             yield myBuffer
         else:
             raise ValueError('Pieces was corrupted. Did not download piece properly.')

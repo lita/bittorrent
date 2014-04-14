@@ -16,3 +16,7 @@ All you need to do is pass in a valid torrent file where the tracker uses
 the HTTP protocol. Still working on a UDP implementation!
 
 `python reactor.py <your torrent file>.torrent`
+
+
+To run with Gunicorn with multiple sessions:
+gunicorn app:app  -k eventlet  -b 10.0.1.169 -w 3 (-w 3 will allow 3 processes)

@@ -8,7 +8,7 @@ def main():
     shared_mem=Queue.PriorityQueue()
     trackerFile = sys.argv[1]
     peerMngr = PeerManager(trackerFile, shared_mem)
-    config = {'DEBUG': True}
+    config = {'DEBUG': True, 'INFO': False, 'STREAMING': False}
     bittorrentThread = Reactor(1, "Thread-1", peerMngr, shared_mem, config)
     bittorrentThread.run()
 
