@@ -33,4 +33,4 @@ within your project directory, run the following command:
 All you need to do is pass in a valid torrent file where the tracker uses
 the HTTP protocol. Still working on a UDP implementation!
 
-`python reactor.py <your torrent file>.torrent`
+`python run.py <your torrent file>.torrent`

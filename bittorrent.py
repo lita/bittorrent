@@ -3,13 +3,20 @@ import struct
 import math
 import sys
 import os
+import time
 
 from bitstring import BitArray
 import bencode
 import requests
 
 from peers import PeerManager
-import pdb
+import pieces
+import logging
+
+logging = logging.getLogger('bittorrent')
+
+OKBLUE = '\033[94m'
+RESET_SEQ = "\033[0m"
 
 HEADER_SIZE = 28 # This is just the pstrlen+pstr+reserved
 # TODO make the parser stateless and a parser for each object 
@@ -24,7 +31,7 @@ def checkValidPeer(peer, infoHash):
     if peerInfoHash == infoHash:
         peer.bufferRead = peer.bufferRead[HEADER_SIZE+len(infoHash)+20:]
         peer.handshake = True
-        print "Handshake Valid"
+        logging.debug("Handshake Valid")
         return True
     else:
         return False
@@ -38,7 +45,7 @@ def convertBytesToDecimal(headerBytes, power):
 
 def handleHave(peer, payload):
     index = convertBytesToDecimal(payload, 3)
-    print "Handling Have"
+    logging.debug("Handling Have")
     peer.bitField[index] = True
 
 def makeInterestedMessage():
@@ -55,7 +62,19 @@ def sendRequest(index, offset, length):
     request = header + id + index + offset + length
     return request
 
-def process_message(peer, peerMngr):
+def pipeRequests(peer, peerMngr):
+    if len(peer.bufferWrite) > 0:
+        return True
+
+    for i in xrange(10):
+        nextBlock = peerMngr.findNextBlock(peer)
+        if not nextBlock:
+            return 
+
+        index, offset, length = nextBlock
+        peer.bufferWrite = sendRequest(index, offset, length)
+        
+def process_message(peer, peerMngr, shared_mem):
     while len(peer.bufferRead) > 3:
         if not peer.handshake:
             if not checkValidPeer(peer, peerMngr.infoHash):
@@ -85,56 +104,54 @@ def process_message(peer, peerMngr):
             continue
         elif msgCode == 1:
             # Unchoked! send request
-            print "Unchoked! Finding block",
+            logging.debug("Unchoked! Finding block")
             peer.choked = False
-            nextBlock = peerMngr.findNextBlock(peer)
-            if not nextBlock:
-                return False
-            index, offset, length = nextBlock
-            peer.bufferWrite += sendRequest(index, offset, length)
+            pipeRequests(peer, peerMngr)
         elif msgCode == 4:
             handleHave(peer, payload)
         elif msgCode == 5:
             peer.setBitField(payload)
         elif msgCode == 7:
-            print ".",
-            sys.stdout.flush()
-
             index = convertBytesToDecimal(payload[0:4], 3)
             offset = convertBytesToDecimal(payload[4:8], 3)
             data = payload[8:]
-            piece = peerMngr.pieces[index]
+            if index != peerMngr.curPiece.pieceIndex:
 
+                return True
+
+            piece = peerMngr.curPiece           
             result = piece.addBlock(offset, data)
 
-            # Adding a block was not successful. Disconnect from peer.
             if not result:
+                logging.debug("Not successful adding block. Disconnecting.")
                 return False
-
-            nextBlock = peerMngr.findNextBlock(peer)
-
-            if not nextBlock:
-                return False
-
-            index, offset, length = nextBlock
-            peer.bufferWrite = sendRequest(index, offset, length)
+            
+            if piece.finished:
+                peerMngr.numPiecesSoFar += 1
+                if peerMngr.numPiecesSoFar < peerMngr.numPieces:
+                    peerMngr.curPiece = peerMngr.pieces.popleft()
+                shared_mem.put((piece.pieceIndex, piece.blocks))
+                logging.info((OKBLUE + "Downloaded piece: %d " + RESET_SEQ) % piece.pieceIndex)
+                
+            pipeRequests(peer, peerMngr)
 
         if not peer.sentInterested:
-            print ("Bitfield initalized. "
-                   "Sending peer we are interested...")
+            logging.debug("Bitfield initalized. "
+                          "Sending peer we are interested...")
             peer.bufferWrite = makeInterestedMessage()
             peer.sentInterested = True
     return True
 
-def generateMoreData(myBuffer, pieces):
-    for piece in pieces:
-        if piece.block:
-            myBuffer += piece.block
+def generateMoreData(myBuffer, shared_mem):
+    while not shared_mem.empty():
+        index, data = shared_mem.get()
+        if data:
+            myBuffer += ''.join(data)
             yield myBuffer
         else:
             raise ValueError('Pieces was corrupted. Did not download piece properly.')
 
-def writeToMultipleFiles(files, path, pieces):
+def writeToMultipleFiles(files, path, peerMngr):
     bufferGenerator = None
     myBuffer = ''
     
@@ -143,7 +160,7 @@ def writeToMultipleFiles(files, path, pieces):
         length = f['length']
 
         if not bufferGenerator:
-            bufferGenerator = generateMoreData(myBuffer, pieces)
+            bufferGenerator = generateMoreData(myBuffer, peerMngr)
 
         while length > len(myBuffer):
             myBuffer = next(bufferGenerator)
@@ -152,11 +169,11 @@ def writeToMultipleFiles(files, path, pieces):
         myBuffer = myBuffer[length:]
         fileObj.close()
 
-def writeToFile(file, length, pieces):
+def writeToFile(file, length, peerMngr):
     fileObj = open('./' + file, 'wb')
     myBuffer = ''
    
-    bufferGenerator = generateMoreData(myBuffer, pieces)
+    bufferGenerator = generateMoreData(myBuffer, peerMngr)
 
     while length > len(myBuffer):
         myBuffer = next(bufferGenerator)
@@ -164,11 +181,11 @@ def writeToFile(file, length, pieces):
     fileObj.write(myBuffer[:length])
     fileObj.close()
 
-def write(info, pieces):
+def write(info, peerMngr):
     if 'files' in info:
         path = './'+ info['name'] + '/'
         if not os.path.exists(path):
             os.makedirs(path)
-        writeToMultipleFiles(info['files'], path, pieces)    
+        writeToMultipleFiles(info['files'], path, peerMngr)    
     else:
-        writeToFile(info['name'], info['length'], pieces)
+        writeToFile(info['name'], info['length'], peerMngr)

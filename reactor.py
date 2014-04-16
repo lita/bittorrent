@@ -1,23 +1,27 @@
 import socket
 import select
 import sys
-import pdb
+import multiprocessing
+import logging
 
 import bittorrent
 from peers import PeerManager
 
-
-
-class Reactor(object):
+class Reactor(multiprocessing.Process):
     """ 
     This is our event loop that makes our program asynchronous. The program
     keeps looping until the file is fully downloaded.
     """
-    def __init__(self, peerMngr):
+    def __init__(self, threadID, name, peerMngr, shared_mem, debug=False, info=True):
+        multiprocessing.Process.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.shared_mem = shared_mem
+        if debug:
+            logging.basicConfig(level=logging.DEBUG)
+        elif info:
+            logging.basicConfig(level=logging.INFO)
         self.peerMngr = peerMngr
-        self.connect()
-        self.run()
-
 
     def connect(self):
         for peer in self.peerMngr.peers:
@@ -34,6 +38,7 @@ class Reactor(object):
             self.peerMngr.peers.remove(peer)
 
     def run(self):
+        self.connect()
         while not self.peerMngr.checkIfDoneDownloading():
             write = [x for x in self.peerMngr.peers if x.bufferWrite != '']
             read = self.peerMngr.peers[:]
@@ -44,7 +49,7 @@ class Reactor(object):
                 try:
                     peer.socket.send(sendMsg)
                 except socket.error as err:
-                    print err
+                    logging.debug(err)
                     self.removePeer(peer)
                     continue 
                 peer.bufferWrite = ''
@@ -53,36 +58,15 @@ class Reactor(object):
                 try:
                     peer.bufferRead += peer.socket.recv(1028)
                 except socket.error as err:
-                    print err
+                    logging.debug(err)
                     self.removePeer(peer)
                     continue
-                result = bittorrent.process_message(peer, self.peerMngr)
+                result = bittorrent.process_message(peer, self.peerMngr, self.shared_mem)
                 if not result:
                     # Something went wrong with peer. Discconnect
                     peer.socket.close()
                     self.removePeer(peer)
 
             if len(self.peerMngr.peers) <= 0:
-                raise Exception("NO MO RE PEERS")
-
-        return
-
-def usage():
-    print ("Usage: bittorent <filename>\n\n"
-           "filename is the tracker name you wish"
-           "to download your file from.")
-
-def main():
-    args = sys.argv[1:]
-    if '-h' in args or '--help' in args:
-        usage()
-        sys.exit(2)
-
-    trackerFile = sys.argv[1]
-    peerMngr = PeerManager(trackerFile)
-    reactor = Reactor(peerMngr)
-    print "Writing to File..."
-    bittorrent.write(peerMngr.tracker['info'], peerMngr.pieces)
-
-if __name__ == "__main__":
-    main()
+                raise Exception("NO MORE PEERS")
+        bittorrent.write(self.peerMngr.tracker['info'], self.shared_mem)       
