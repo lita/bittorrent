@@ -16,5 +16,10 @@ In order to run this program, you need to run it with Gunicorn. This program wor
 
 `gunicorn app:app -t 10000000`
 
+After launching, you can open your browser to http://localhost:8000/drop to load in a torrent file and watch movies.
+
 In order to run with Gunicorn with multiple sessions, use the following command:
-`gunicorn app:app  -k eventlet  -b 10.0.1.169 -w 3 (-w 3 will allow 3 processes)`
+
+`gunicorn app:app  -k eventlet  -b [your computer's ip>]-w 3 (-w 3 will allow 3 processes)`
+
+Go to http://[your computer's ip]:8000/drop to use the program.
