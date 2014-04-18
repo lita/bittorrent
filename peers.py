@@ -18,7 +18,7 @@ class PeerManager(object):
     Holds the tracker information and the list of ip addresses and ports.
     """
 
-    def __init__(self, trackerFile=None, stream=None):
+    def __init__(self, trackerFile):
         """
         Initalizes the PeerManager, which handles all the peers it is connected
         to.
@@ -38,12 +38,7 @@ class PeerManager(object):
         self.peer_id = '0987654321098765432-'
         self.peers = []
         self.pieces = deque([])
-        if trackerFile:
-            self.tracker = bencode.bdecode(open(trackerFile,'rb').read())
-        elif stream:
-            self.tracker = bencode.bdecode(stream.read())
-        else:
-            raise ValueError("Need a tracker file or a stream")
+        self.tracker = bencode.bdecode(open(trackerFile,'rb').read())
         bencodeInfo = bencode.bencode(self.tracker['info'])
         self.infoHash = hashlib.sha1(bencodeInfo).digest()
         self.getPeers()

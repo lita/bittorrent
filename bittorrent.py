@@ -156,18 +156,19 @@ def writeToMultipleFiles(files, path, peerMngr):
     myBuffer = ''
     
     for f in files:
-        fileObj = open(path + f['path'][0], 'wb')
-        length = f['length']
+        p = path + '/'.join(f['path'])
+        if not os.path.exists(os.path.dirname(p)):
+            os.makedirs(os.path.dirname(p))
+        with open(p, "w") as fileObj:
+            length = f['length']
+            if not bufferGenerator:
+                bufferGenerator = generateMoreData(myBuffer, peerMngr)
 
-        if not bufferGenerator:
-            bufferGenerator = generateMoreData(myBuffer, peerMngr)
+            while length > len(myBuffer):
+                myBuffer = next(bufferGenerator)
 
-        while length > len(myBuffer):
-            myBuffer = next(bufferGenerator)
-
-        fileObj.write(myBuffer[:length])
-        myBuffer = myBuffer[length:]
-        fileObj.close()
+            fileObj.write(myBuffer[:length])
+            myBuffer = myBuffer[length:]
 
 def writeToFile(file, length, peerMngr):
     fileObj = open('./' + file, 'wb')
@@ -184,8 +185,6 @@ def writeToFile(file, length, peerMngr):
 def write(info, peerMngr):
     if 'files' in info:
         path = './'+ info['name'] + '/'
-        if not os.path.exists(path):
-            os.makedirs(path)
         writeToMultipleFiles(info['files'], path, peerMngr)    
     else:
         writeToFile(info['name'], info['length'], peerMngr)
