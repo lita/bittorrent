@@ -12,6 +12,9 @@ This program was a learning exercise about networking and asynchronous I/O. Most
 * How to use Wireshark for debugging
 * Write asynchronous programs
 * Network programming in Python (sending packets, dealing with network errors, managing multiple IO connections)
+* HTTP Protocals with video streaming. The power of HTML5 <video> tag!
+* Flask API
+* Concurrancy in Python! Use multiprocessing rather than threading unless you are doing IO!
 
 ###TODO List:
 * Handle uploading a file.
@@ -41,3 +44,10 @@ But you can install the necessary dependencies by using pip. Just run the follow
 All you need to do is pass in a valid torrent file:
 
 `python run.py <your torrent file>.torrent`
+
+Images of the Web App below:
+
+![Alt text](https://raw.githubusercontent.com/litacho/website/master/images/front.png)
+<hr>
+![Alt text](https://raw.githubusercontent.com/litacho/website/master/images/back.png)
+
