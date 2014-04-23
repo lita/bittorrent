@@ -45,9 +45,3 @@ All you need to do is pass in a valid torrent file:
 
 `python run.py <your torrent file>.torrent`
 
-Images of the Web App below:
-
-![Alt text](https://raw.githubusercontent.com/litacho/website/master/images/front.png)
-<hr>
-![Alt text](https://raw.githubusercontent.com/litacho/website/master/images/back.png)
-
