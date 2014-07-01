@@ -55,9 +55,12 @@ def send_msg(conn, sock, msg, trans_id, action, size):
 
 def scrape_udp(info_hash, announce, peer_id):
     parsed = urlparse(announce)
+    ip = socket.gethostbyname(parsed.hostname)
+    if ip == '127.0.0.1':
+        return False
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(8)
-    conn = (socket.gethostbyname(parsed.hostname), parsed.port)
+    conn = (ip, parsed.port)
     msg, trans_id, action = make_connection_id_request()
     response = send_msg(conn, sock, msg, trans_id, action, 16)
     conn_id = response[8:]

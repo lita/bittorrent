@@ -87,13 +87,16 @@ class PeerManager(object):
 
     def getPeers(self):
         # TODO: move the self.infoHash to init if we need it later.
-        announce = self.tracker['announce']
-        if announce.startswith('http'):
-            length = str(self.tracker['info']['piece length'])
-            response = scrape.scrape_http(announce, self.infoHash, self.peer_id, length)
-        elif announce.startswith('udp'):
-            response = scrape.scrape_udp(self.infoHash, announce, self.peer_id)
-
+        import pdb; pdb.set_trace()
+        for announce in self.tracker['announce-list']:
+            announce = announce[0]
+            if announce.startswith('http'):
+                length = str(self.tracker['info']['piece length'])
+                response = scrape.scrape_http(announce, self.infoHash, self.peer_id, length)
+            elif announce.startswith('udp'):
+                response = scrape.scrape_udp(self.infoHash, announce, self.peer_id)
+            if response:
+                break
         for chunk in self.chunkToSixBytes(response):
             ip = []
             port = None
