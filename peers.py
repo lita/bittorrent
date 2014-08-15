@@ -5,7 +5,6 @@ from collections import deque
 import logging
 
 import bencode
-import requests
 from bitstring import BitArray
 
 import pieces
@@ -86,9 +85,16 @@ class PeerManager(object):
         return [x[0] for x in annouceList if x[0].startswith('http')]
 
     def getPeers(self):
-        # TODO: move the self.infoHash to init if we need it later.
-        import pdb; pdb.set_trace()
-        for announce in self.tracker['announce-list']:
+        """
+        Grabs the list of IP address from the annouce url. Then we create a
+        non-blocking socket object and add it to our list of peers (self.peers).
+        """
+        announce_list = []
+        if 'announce-list' in self.tracker:
+            announce_list = self.tracker['announce-list']
+        else:
+            announce_list.append([self.tracker['announce']])
+        for announce in announce_list:
             announce = announce[0]
             if announce.startswith('http'):
                 length = str(self.tracker['info']['piece length'])
@@ -114,7 +120,6 @@ class PeerManager(object):
         #TODO make a better algorithm to find a the next block faster
         for blockIndex in range(self.curPiece.num_blocks):
             if not self.curPiece.blockTracker[blockIndex]:
-                #piece.blockTracker[blockIndex] = 1
                 if blockIndex == self.curPiece.num_blocks-1:
                     size = self.curPiece.calculateLastSize()
                 else:
